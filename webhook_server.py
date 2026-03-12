@@ -20,11 +20,11 @@ from fastapi import FastAPI, BackgroundTasks, Request, HTTPException
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 # These can also be set as environment variables on Render.com for security.
-RETELL_API_KEY   = os.getenv("RETELL_API_KEY",   "key_d6167a8f532f9f5dd9cf47a53693")
-INTAKE_AGENT_ID  = os.getenv("INTAKE_AGENT_ID",  "")   # filled after running setup_intake_agent.py
+RETELL_API_KEY   = os.getenv("RETELL_API_KEY",   "")
+INTAKE_AGENT_ID  = os.getenv("INTAKE_AGENT_ID",  "")
 FROM_NUMBER      = os.getenv("FROM_NUMBER",       "+12057086353")
 DELAY_SECONDS    = int(os.getenv("DELAY_SECONDS", "60"))
-WEBHOOK_SECRET   = os.getenv("WEBHOOK_SECRET",    "")   # optional: add shared secret for security
+WEBHOOK_SECRET   = os.getenv("WEBHOOK_SECRET",    "")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
