@@ -17,6 +17,7 @@ from datetime import datetime
 
 import requests
 from fastapi import FastAPI, BackgroundTasks, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 # These can also be set as environment variables on Render.com for security.
@@ -30,6 +31,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 app = FastAPI(title="RentMall Intake Webhook")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 # ─── Health check ─────────────────────────────────────────────────────────────
 @app.get("/")
