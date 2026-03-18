@@ -33,6 +33,10 @@ FROM_NUMBER      = os.getenv("FROM_NUMBER",       "+17376773393")
 DELAY_SECONDS    = int(os.getenv("DELAY_SECONDS", "60"))
 WEBHOOK_SECRET   = os.getenv("WEBHOOK_SECRET",    "")
 
+BASE44_API_KEY   = os.getenv("BASE44_API_KEY",   "98dd4a214faa4e4fba2c0807f5a4f633")
+BASE44_APP_ID    = os.getenv("BASE44_APP_ID",    "6821d4c4761f3a57673ddfa7")
+BASE44_URL       = f"https://app.base44.com/api/apps/{BASE44_APP_ID}/entities/CustomerRequest"
+
 MAX_ATTEMPTS     = 3
 RETRY_DELAY      = 3600   # 1 hour between retries
 CALL_CUTOFF_HOUR = 21     # 9 PM CT — no calls after this
@@ -91,6 +95,105 @@ async def handle_new_request(request: Request, background_tasks: BackgroundTasks
     background_tasks.add_task(call_after_delay, data, phone, name, language)
 
     return {"status": "queued", "name": name, "phone": phone, "delay_seconds": DELAY_SECONDS}
+
+
+# ─── Inbound call tool: Emily submits rental request ──────────────────────────
+@app.post("/webhook/inbound-submit")
+async def handle_inbound_submit(request: Request):
+    """
+    Called by Retell when Emily (inbound) invokes the submit_rental_request tool.
+    Creates a CustomerRequest record in Base44.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    call_id   = data.get("call_id", "")
+    tool_name = data.get("name", "")
+    raw_args  = data.get("arguments", "{}")
+
+    # Retell sends arguments as a JSON string
+    if isinstance(raw_args, str):
+        try:
+            args = json.loads(raw_args)
+        except Exception:
+            args = {}
+    else:
+        args = raw_args
+
+    log.info(f"Inbound submit from call {call_id}: {args}")
+
+    # Build scaffolding_measurements if relevant
+    scaffolding_measurements = None
+    if args.get("equipment") == "scaffolding" and args.get("scaffolding_total_area"):
+        total_area = args["scaffolding_total_area"]
+        scaffolding_measurements = {
+            "walls": [{"id": 1, "width": total_area, "height": 1, "area": total_area}],
+            "total_area": total_area,
+        }
+
+    # Map load capacity description → Base44 enum
+    load_map = {
+        "light": "light", "workers": "light", "tools": "light",
+        "medium": "medium",
+        "heavy": "heavy", "materials": "heavy",
+    }
+    raw_load = (args.get("scaffolding_load_capacity") or "").lower()
+    load_capacity = next((v for k, v in load_map.items() if k in raw_load), raw_load or None)
+
+    phone = to_e164(args.get("phone", ""))
+
+    payload = {
+        "full_name":   args.get("full_name", "Inbound caller"),
+        "email":       args.get("email", "unknown@inbound.call"),
+        "phone":       phone or args.get("phone", ""),
+        "equipment":   args.get("equipment", ""),
+        "location":    args.get("location", ""),
+        "start_date":  args.get("start_date", ""),
+        "end_date":    args.get("end_date", ""),
+        "status":      "pending",
+        "notes":       args.get("notes", "Submitted via inbound call"),
+        "delivery_option": args.get("delivery_option", "delivery"),
+        "language":    "en",
+        # Scaffolding
+        "scaffolding_measurements": scaffolding_measurements,
+        "scaffolding_load_capacity": load_capacity,
+        "terrain_access": args.get("terrain_access"),
+        # Scissor lift
+        "scissors_working_height":           args.get("scissors_working_height"),
+        "scissors_platform_weight_capacity": args.get("scissors_platform_weight_capacity"),
+        "scissors_narrow_passage_width":     args.get("scissors_narrow_passage_width"),
+        # Boom lift
+        "boom_max_working_height":  args.get("boom_max_working_height"),
+        "boom_horizontal_outreach": args.get("boom_horizontal_outreach"),
+        "boom_type":                args.get("boom_type"),
+        # Boom truck
+        "boom_truck_load_type":         args.get("boom_truck_load_type"),
+        "boom_truck_working_height":    args.get("boom_truck_working_height"),
+        "boom_truck_ground_conditions": args.get("boom_truck_ground_conditions"),
+    }
+
+    # Remove None values so Base44 doesn't reject optional fields
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    try:
+        resp = requests.post(
+            BASE44_URL,
+            headers={"api_key": BASE44_API_KEY, "Content-Type": "application/json"},
+            json=payload,
+            timeout=10,
+        )
+        if resp.ok:
+            record_id = resp.json().get("id", "?")
+            log.info(f"✓ Base44 record created: {record_id} | {payload.get('full_name')} | {payload.get('equipment')}")
+            return {"result": "Request submitted successfully! Our team will be in touch very soon."}
+        else:
+            log.error(f"Base44 error {resp.status_code}: {resp.text}")
+            return {"result": "Request received — our team will follow up shortly."}
+    except Exception as e:
+        log.error(f"Failed to create Base44 record: {e}")
+        return {"result": "Request received — our team will follow up shortly."}
 
 
 # ─── Retell call-ended webhook ─────────────────────────────────────────────────
