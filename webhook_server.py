@@ -144,14 +144,20 @@ async def handle_inbound_submit(request: Request):
 
     phone = to_e164(args.get("phone", ""))
 
+    # Fallback defaults for required Base44 fields
+    today     = datetime.now(tz=CENTRAL_TZ)
+    email     = args.get("email") or f"inbound+{(phone or 'unknown').replace('+','')}@rentmall.ai"
+    start_date = args.get("start_date") or (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    end_date   = args.get("end_date")   or (today + timedelta(days=14)).strftime("%Y-%m-%d")
+
     payload = {
-        "full_name":   args.get("full_name", "Inbound caller"),
-        "email":       args.get("email", "unknown@inbound.call"),
+        "full_name":   args.get("full_name") or "Inbound caller",
+        "email":       email,
         "phone":       phone or args.get("phone", ""),
         "equipment":   args.get("equipment", ""),
         "location":    args.get("location", ""),
-        "start_date":  args.get("start_date", ""),
-        "end_date":    args.get("end_date", ""),
+        "start_date":  start_date,
+        "end_date":    end_date,
         "status":      "pending",
         "notes":       args.get("notes", "Submitted via inbound call"),
         "delivery_option": args.get("delivery_option", "delivery"),
