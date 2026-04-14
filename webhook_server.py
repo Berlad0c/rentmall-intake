@@ -229,7 +229,33 @@ async def handle_call_ended(request: Request):
         else:
             log.info(f"Max attempts ({MAX_ATTEMPTS}) reached for {meta['name']} ({meta['phone']}) — stopping")
 
+    # ── If call was successful, trigger supplier pipeline ─────────────────────
+    elif call_id in pending_calls:
+        meta = pending_calls.pop(call_id)
+        customer_data = meta.get("data", {})
+        equipment = customer_data.get("equipment", "")
+        if equipment:
+            log.info(f"Triggering supplier pipeline for '{equipment}' — {meta.get('name')}")
+            asyncio.create_task(_run_supplier_pipeline(customer_data))
+
     return {"status": "ok"}
+
+
+async def _run_supplier_pipeline(customer_data: dict):
+    """Run supplier pipeline in background after successful customer call."""
+    try:
+        from supplier_pipeline import run_pipeline
+        customer = {
+            "equipment":   customer_data.get("equipment", ""),
+            "location":    customer_data.get("location", "Houston, TX"),
+            "job_address": customer_data.get("location", "Houston, TX"),
+            "start_date":  customer_data.get("start_date", "soon"),
+            "end_date":    customer_data.get("end_date", ""),
+            "details":     customer_data.get("notes", ""),
+        }
+        await asyncio.to_thread(run_pipeline, customer)
+    except Exception as e:
+        log.error(f"Supplier pipeline error: {e}")
 
 
 # ─── Background tasks ──────────────────────────────────────────────────────────
@@ -328,6 +354,24 @@ def place_intake_call(data: dict, phone: str, name: str, language: str = "en", a
     else:
         log.error(f"Retell API error {resp.status_code}: {resp.text}")
         resp.raise_for_status()
+
+
+# ─── Keep-alive (prevents Render free-tier sleep after 15 min inactivity) ─────
+SELF_URL = os.getenv("RENDER_EXTERNAL_URL", "https://rentmall-intake.onrender.com")
+
+async def _keep_alive_loop():
+    await asyncio.sleep(60)          # wait 1 min after startup
+    while True:
+        try:
+            await asyncio.to_thread(requests.get, f"{SELF_URL}/", timeout=10)
+            log.info("keep-alive ping OK")
+        except Exception as e:
+            log.warning(f"keep-alive ping failed: {e}")
+        await asyncio.sleep(840)     # ping every 14 minutes
+
+@app.on_event("startup")
+async def _startup():
+    asyncio.create_task(_keep_alive_loop())
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
