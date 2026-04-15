@@ -1,7 +1,7 @@
 [
   {
     "name": "Ground Zero Equipment and Services",
-    "specialization": ["scissor lift", "boom lift", "telehandler", "forklift", "excavator"],
+    "specialization": ["scissor lift", "scissors lift", "boom lift", "telehandler", "forklift", "excavator"],
     "location": "Conroe TX 77306",
     "service_radius_miles": 50,
     "approach": "sms",
