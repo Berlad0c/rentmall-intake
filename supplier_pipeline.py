@@ -88,7 +88,6 @@ def place_call(phone: str, customer: dict):
                 "end_date":        customer["end_date"],
                 "details":         customer.get("details", ""),
                 "customer_name":   customer.get("full_name", "the contractor"),
-                "customer_phone":  customer.get("phone", ""),
             },
         },
         timeout=15,
