@@ -29,7 +29,7 @@ def load_vendors():
     return json.loads(VENDORS_PATH.read_text(encoding="utf-8"))
 
 def matches_equipment(vendor, equipment: str) -> bool:
-    equip = equipment.lower().strip()
+    equip = equipment.lower().strip().replace("_", " ")
     return any(equip in s.lower() or s.lower() in equip
                for s in vendor.get("specialization", []))
 
