@@ -63,6 +63,10 @@ app.add_middleware(
 # In-memory call tracker: call_id -> metadata
 pending_calls: dict = {}
 
+# Deduplication: phone -> timestamp of last accepted request
+_recent_requests: dict = {}
+DEDUP_WINDOW = 10  # seconds
+
 # ─── Health check ─────────────────────────────────────────────────────────────
 @app.get("/")
 def health():
@@ -252,6 +256,8 @@ async def _run_supplier_pipeline(customer_data: dict):
             "start_date":  customer_data.get("start_date", "soon"),
             "end_date":    customer_data.get("end_date", ""),
             "details":     customer_data.get("notes", ""),
+            "full_name":   customer_data.get("full_name", ""),
+            "phone":       customer_data.get("phone", ""),
         }
         await asyncio.to_thread(run_pipeline, customer)
     except Exception as e:
